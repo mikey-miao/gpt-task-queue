@@ -1,0 +1,448 @@
+/* 折叠按钮 */
+.qq-toggle-btn {
+    position: fixed;
+    bottom: 100px;
+    right: 100px;
+    width: 40px;
+    height: 40px;
+    background: rgba(230, 230, 230, 0.5);
+    color: #0285FF;
+    border-radius: 50%;
+    border: none;
+    cursor: move;
+    z-index: 2147483647; /* 最大z-index，确保在top layer */
+    font-size: 16px;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: box-shadow 0.2s ease, background 0.3s ease, color 0.3s ease;
+    /* transform不参与transition，避免位置跳动 */
+}
+
+.qq-toggle-btn:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.qq-toggle-btn.dragging {
+    cursor: grabbing;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* 按钮状态 - 等待/处理中（呼吸效果） */
+.qq-toggle-btn.status-processing {
+    animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+    0%, 100% {
+        color: rgba(2, 133, 255, 1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    50% {
+        color: rgba(2, 133, 255, 0.2);
+        box-shadow: 0 6px 20px rgba(2, 133, 255, 0.4);
+    }
+}
+
+/* 按钮状态 - 发送中（橘红色） */
+.qq-toggle-btn.status-error {
+    background: rgba(255, 87, 51, 0.5);
+    animation: sending 2s ease-in-out infinite;
+}
+
+@keyframes sending {
+    0%, 100% {
+        color: rgba(255, 255, 255, 1);
+        box-shadow: 0 4px 12px rgba(255, 87, 51, 0.4);
+    }
+    50% {
+        color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 6px 20px rgba(255, 87, 51, 0.8);
+    }
+}
+
+/* 浮动设置按钮 */
+.qq-floating-settings-btn {
+    position: fixed;
+    bottom: 150px; /* 100 + 40 + 10 */
+    right: 107.5px; /* 100 + (40-25)/2 = 居中对齐 */
+    width: 25px;
+    height: 25px;
+    background: rgba(230, 230, 230, 0.8);
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    z-index: 9998;
+    font-size: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    /* 拖尾效果：慢-快-慢的动态过渡 (0.8秒) */
+    transition: transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1),
+                background 0.2s ease,
+                box-shadow 0.2s ease;
+}
+
+.qq-floating-settings-btn.show {
+    display: flex;
+}
+
+.qq-floating-settings-btn:hover {
+    background: rgba(230, 230, 230, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    /* 不使用transform scale，避免覆盖拖动的translate */
+}
+
+/* 主面板 */
+.qq-panel {
+    position: fixed;
+    /* 位置由 JavaScript 动态设置 */
+    width: 360px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* 拖尾效果：慢-快-慢的动态过渡 (0.8秒) */
+    transition: left 0.8s cubic-bezier(0.25, 0.1, 0.25, 1),
+                top 0.8s cubic-bezier(0.25, 0.1, 0.25, 1),
+                right 0.8s cubic-bezier(0.25, 0.1, 0.25, 1),
+                bottom 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.qq-panel.show {
+    display: flex;
+}
+
+/* 主页面布局 */
+.qq-main-page {
+    display: flex;
+    flex-direction: column;
+    height: 270px; /* 固定高度：160px(列表) + 60px(输入) + 50px(边距) */
+}
+
+/* 选中文字区域 - 在input-area上方 */
+.qq-selection-area {
+    padding: 8px 12px;
+    background: #e8e8e8;
+    border-top: 1px solid #ddd;
+    display: none;
+    order: 2;
+    flex-shrink: 0; /* 不缩小，始终保持完整 */
+}
+
+.qq-selection-area.show {
+    display: block;
+}
+
+.qq-selection-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qq-selection-text {
+    flex: 1;
+    color: #33333386;
+    font-size: 12px;
+    line-height: 1.4;
+    /* 显示最多2行，超出显示省略号 */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.qq-clear-selection-btn {
+    width: 15px;
+    height: 15px;
+    min-width: 15px;
+    min-height: 15px;
+    background: #a4a4a4f4;
+    color: white;
+    border: none;
+    border-radius: 2px;
+    font-size: 14px;
+    line-height: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.qq-clear-selection-btn:hover {
+    background: #444;
+}
+
+/* 队列列表 - 现在在最上面 */
+.qq-list-area {
+    overflow-y: auto;
+    padding: 12px;
+    flex: 1; /* 使用flex-grow占据剩余空间 */
+    min-height: 100px; /* 最小高度 */
+    border-radius: 8px 8px 0 0;
+    order: 1;
+}
+
+/* 输入区域 - 现在在list-area下面 */
+.qq-input-area {
+    padding: 12px 16px;
+    border-top: 1px solid #ddd;
+    border-radius: 0 0 8px 8px;
+    order: 3;
+    flex-shrink: 0; /* 不缩小，始终保持完整 */
+}
+
+.qq-input-wrapper {
+    display: flex;
+    gap: 8px;
+}
+
+.qq-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    outline: none;
+}
+
+.qq-input:focus {
+    border-color: #333;
+}
+
+.qq-add-btn {
+    background: #333;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.qq-add-btn:hover {
+    background: #444;
+}
+
+/* 完全隐藏滚动条 */
+.qq-list-area::-webkit-scrollbar {
+    display: none;
+}
+
+/* Firefox 支持 */
+.qq-list-area {
+    scrollbar-width: none;
+}
+
+.qq-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+    font-size: 13px;
+}
+
+/* 问题项 */
+.qq-question-item {
+    background: #fafafa;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: move;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* 平滑的位置过渡动画，使用缓动函数实现减速效果 */
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                box-shadow 0.2s ease,
+                border-color 0.2s ease,
+                opacity 0.2s ease,
+                margin-bottom 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.qq-question-item:hover {
+    border-color: #999;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.qq-question-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    /* 拖动时禁用transition，让拖动更跟手 */
+    transition: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: scale(1.02);
+}
+
+/* 删除动画 - 向左滑出 */
+.qq-question-item.removing {
+    animation: slideOutLeft 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes slideOutLeft {
+    0% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(-120%) scale(0.8);
+        opacity: 0;
+    }
+}
+
+.qq-question-text {
+    flex: 1;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.4;
+    /* 固定显示2行 */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-wrap: break-word;
+}
+
+.qq-delete-btn {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    background: rgba(0, 0, 0, 0.05);
+    color: #666;
+    border: none;
+    border-radius: 4px;
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s ease;
+}
+
+.qq-delete-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 页面系统 */
+.qq-page {
+    display: none;
+    flex-direction: column;
+}
+
+.qq-page.active {
+    display: flex;
+}
+
+/* 设置页面 */
+.qq-settings-page {
+    height: 270px; /* 与主页面相同的固定高度 */
+    overflow-y: auto; /* 允许滚动 */
+    padding: 16px;
+    scrollbar-width: none; /* Firefox 支持 */
+}
+
+/* 隐藏设置页面的滚动条 */
+.qq-settings-page::-webkit-scrollbar {
+    display: none;
+}
+
+.qq-settings-item {
+    margin-bottom: 20px;
+}
+
+.qq-settings-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.qq-settings-desc {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.qq-settings-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.qq-settings-input:focus {
+    outline: none;
+    border-color: #8b5cf6;
+}
+
+.qq-settings-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qq-settings-checkbox input {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+/* 选中文字悬浮按钮 */
+.qq-selection-popup {
+    position: absolute;
+    z-index: 10000;
+    background: #333;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    display: none;
+    user-select: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: all 0.2s ease;
+}
+
+.qq-selection-popup.show {
+    display: flex;
+}
+
+.qq-selection-popup:hover {
+    background: #444;
+    transform: scale(1.1);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+}
+
+.qq-selection-popup:active {
+    background: #555;
+    transform: scale(0.95);
+}
+

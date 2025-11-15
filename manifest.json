@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT 问题队列助手",
+  "version": "1.0.0",
+  "description": "在 ChatGPT 页面右下角添加问题队列，支持自动提问和选中文字识别",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+
