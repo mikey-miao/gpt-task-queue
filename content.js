@@ -3,13 +3,80 @@
     'use strict';
 
 
+    // ==================== 常量定义 ====================
+    const CONSTANTS = {
+        // 输入限制
+        MIN_QUESTION_LENGTH: 1,
+        MAX_QUESTION_LENGTH: 10000,
+        MIN_CONTEXT_LENGTH: 3,
+        MAX_CONTEXT_LENGTH: 2000,
+        
+        // 时间延迟（毫秒）
+        AUTO_PROCESS_INTERVAL: 2000,
+        SELECTION_CHECK_INTERVAL: 500,
+        FOCUS_DELAY: 200,
+        SEND_BUTTON_DELAY: 500,
+        SELECTION_DELAY: 10,
+        DRAG_UPDATE_DELAY: 50,
+        
+        // 动画时间（毫秒）
+        DELETE_SLIDE_DURATION: 1000,
+        DELETE_COLLAPSE_DURATION: 2000,
+        
+        // UI 尺寸
+        PANEL_WIDTH: 360,
+        PANEL_MAX_HEIGHT: 400,
+        PANEL_GAP: 10,
+        BUTTON_SIZE: 40,
+        POPUP_BUTTON_SIZE: 32,
+        POPUP_BUTTON_OFFSET: 16,
+        
+        // Z-index
+        MAX_Z_INDEX: 2147483647,
+        
+        // 拖拽阈值
+        DRAG_THRESHOLD: 5,
+        
+        // 滚动相关
+        SCROLL_THRESHOLD: 80,
+        SCROLL_MAX_SPEED: 3,
+        SCROLL_MIN_SPEED: 0.5
+    };
+
     // ==================== 工具函数 ====================
     function generateId() {
         return 'qq_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
+    
+    /**
+     * 验证并清理文本输入
+     * @param {string} text - 要验证的文本
+     * @param {number} minLength - 最小长度
+     * @param {number} maxLength - 最大长度
+     * @returns {string|null} 清理后的文本，如果无效则返回 null
+     */
+    function validateText(text, minLength, maxLength) {
+        if (typeof text !== 'string') {
+            return null;
+        }
+        const trimmed = text.trim();
+        if (trimmed.length < minLength || trimmed.length > maxLength) {
+            return null;
+        }
+        return trimmed;
+    }
 
     // ==================== 存储管理器 ====================
+    /**
+     * 管理 Chrome Storage API 的封装类
+     */
     class StorageManager {
+        /**
+         * 从存储中获取值
+         * @param {string} key - 存储键名
+         * @param {*} defaultValue - 默认值
+         * @returns {Promise<*>} 存储的值或默认值
+         */
         async get(key, defaultValue = null) {
             return new Promise((resolve) => {
                 chrome.storage.local.get([key], (result) => {
@@ -18,6 +85,12 @@
             });
         }
 
+        /**
+         * 设置存储值
+         * @param {string} key - 存储键名
+         * @param {*} value - 要存储的值
+         * @returns {Promise<void>}
+         */
         async set(key, value) {
             return new Promise((resolve) => {
                 chrome.storage.local.set({ [key]: value }, resolve);
@@ -26,6 +99,9 @@
     }
 
     // ==================== 选择追踪器 ====================
+    /**
+     * 追踪用户在页面上的文本选择，并提供上下文捕获功能
+     */
     class SelectionTracker {
         constructor() {
             this.currentSelection = '';
@@ -37,7 +113,7 @@
         createPopupButton() {
             this.popupButton = document.createElement('div');
             this.popupButton.className = 'qq-selection-popup';
-            this.popupButton.innerHTML = '+';
+            this.popupButton.textContent = '+';
             this.popupButton.title = '添加为上下文';
             document.body.appendChild(this.popupButton);
 
@@ -48,7 +124,7 @@
                 const selection = window.getSelection();
                 const text = selection.toString().trim();
                 
-                if (text.length >= 3 && text.length <= 2000) {
+                if (text.length >= CONSTANTS.MIN_CONTEXT_LENGTH && text.length <= CONSTANTS.MAX_CONTEXT_LENGTH) {
                     this.currentSelection = text;
                     
                     if (this.onCaptureCallback) {
@@ -74,7 +150,7 @@
                 // 延迟一下，确保选择已完成
                 setTimeout(() => {
                     this.checkSelectionAtMouse(e.clientX, e.clientY);
-                }, 10);
+                }, CONSTANTS.SELECTION_DELAY);
             });
 
             // 点击其他地方隐藏按钮
@@ -100,8 +176,10 @@
                 isInArticle = element && element.closest('article') !== null;
             }
             
-            // 如果选中了文本（3-2000字符）且在article内，在鼠标位置显示按钮
-            if (text.length >= 3 && text.length <= 2000 && isInArticle) {
+            // 如果选中了文本且在article内，在鼠标位置显示按钮
+            if (text.length >= CONSTANTS.MIN_CONTEXT_LENGTH && 
+                text.length <= CONSTANTS.MAX_CONTEXT_LENGTH && 
+                isInArticle) {
                 this.showPopupAtMouse(mouseX, mouseY);
             } else {
                 this.hidePopup();
@@ -110,8 +188,9 @@
 
         showPopupAtMouse(mouseX, mouseY) {
             // 按钮显示在光标正中间
-            this.popupButton.style.left = (mouseX - 16) + 'px'; // -16 使按钮水平居中（32/2）
-            this.popupButton.style.top = (mouseY + window.scrollY - 16) + 'px'; // -16 使按钮垂直居中（32/2）
+            const offset = CONSTANTS.POPUP_BUTTON_OFFSET;
+            this.popupButton.style.left = (mouseX - offset) + 'px';
+            this.popupButton.style.top = (mouseY + window.scrollY - offset) + 'px';
             this.popupButton.classList.add('show');
         }
 
@@ -131,7 +210,13 @@
     }
 
     // ==================== 队列管理器 ====================
+    /**
+     * 管理问题队列的类，负责添加、删除、保存和加载问题
+     */
     class QuestionQueueManager {
+        /**
+         * @param {StorageManager} storage - 存储管理器实例
+         */
         constructor(storage) {
             this.storage = storage;
             this.questions = [];
@@ -140,19 +225,64 @@
         }
 
         async loadFromStorage() {
-            const saved = await this.storage.get('qq_questions', []);
-            this.questions = saved;
+            try {
+                const saved = await this.storage.get('qq_questions', []);
+                // 验证加载的数据格式
+                if (Array.isArray(saved)) {
+                    this.questions = saved.filter(q => 
+                        q && 
+                        typeof q === 'object' && 
+                        q.id && 
+                        q.question && 
+                        typeof q.question === 'string'
+                    );
+                    console.log(`[QuestionQueueManager] 已加载 ${this.questions.length} 个问题`);
+                } else {
+                    console.warn('[QuestionQueueManager] 存储的数据格式无效，重置为空数组');
+                    this.questions = [];
+                }
+            } catch (error) {
+                console.error('[QuestionQueueManager] 加载存储失败:', error);
+                this.questions = [];
+            }
         }
 
         async saveToStorage() {
-            await this.storage.set('qq_questions', this.questions);
+            try {
+                await this.storage.set('qq_questions', this.questions);
+            } catch (error) {
+                console.error('[QuestionQueueManager] 保存到存储失败:', error);
+            }
         }
 
         addQuestion(text, context = '') {
+            // 验证问题文本
+            const validatedQuestion = validateText(
+                text, 
+                CONSTANTS.MIN_QUESTION_LENGTH, 
+                CONSTANTS.MAX_QUESTION_LENGTH
+            );
+            if (!validatedQuestion) {
+                throw new Error(`问题长度必须在 ${CONSTANTS.MIN_QUESTION_LENGTH}-${CONSTANTS.MAX_QUESTION_LENGTH} 字符之间`);
+            }
+            
+            // 验证上下文（如果提供）
+            let validatedContext = '';
+            if (context) {
+                const validated = validateText(
+                    context,
+                    CONSTANTS.MIN_CONTEXT_LENGTH,
+                    CONSTANTS.MAX_CONTEXT_LENGTH
+                );
+                if (validated) {
+                    validatedContext = validated;
+                }
+            }
+            
             const question = {
                 id: generateId(),
-                question: text,
-                context: context,
+                question: validatedQuestion,
+                context: validatedContext,
                 timestamp: Date.now(),
                 status: 'pending'
             };
@@ -172,11 +302,19 @@
     }
 
     // ==================== ChatGPT 检测器 ====================
+    /**
+     * 检测 ChatGPT 页面状态，判断是否可以发送新问题
+     */
     class ChatGPTDetector {
         constructor() {
             this.checkInterval = 500;
         }
 
+        /**
+         * 延迟指定毫秒数
+         * @param {number} ms - 延迟毫秒数
+         * @returns {Promise<void>}
+         */
         sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
@@ -253,7 +391,14 @@
     }
 
     // ==================== 自动发送器 ====================
+    /**
+     * 自动发送问题到 ChatGPT 输入框
+     */
     class AutoSender {
+        /**
+         * @param {ChatGPTDetector} detector - ChatGPT 检测器实例
+         * @param {StorageManager} storage - 存储管理器实例
+         */
         constructor(detector, storage) {
             this.detector = detector;
             this.storage = storage;
@@ -283,10 +428,10 @@
 
         async sendQuestion(item, onInputComplete = null) {
             try {
-                
                 // 1. 获取输入框
                 const element = this.detector.getTextarea();
                 if (!element) {
+                    console.error('[AutoSender] 无法找到输入框元素');
                     return false;
                 }
 
@@ -294,7 +439,7 @@
 
                 // 2. 输入内容
                 element.focus();
-                await this.detector.sleep(200);
+                await this.detector.sleep(CONSTANTS.FOCUS_DELAY);
 
                 if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
                     element.value = fullText;
@@ -307,7 +452,6 @@
                     document.execCommand('insertText', false, fullText);
                 }
                 
-                
                 // 输入完成后立即触发回调（开始动画）
                 if (onInputComplete) {
                     onInputComplete();
@@ -318,15 +462,17 @@
                 // 3. 立即获取发送按钮并点击（不做任何检测）
                 const sendButton = this.detector.getSendButton();
                 if (!sendButton) {
+                    console.error('[AutoSender] 无法找到发送按钮');
                     return false;
                 }
                 
                 sendButton.click();
                 
-                await this.detector.sleep(500);
+                await this.detector.sleep(CONSTANTS.SEND_BUTTON_DELAY);
                 
                 return true;
-            } catch (e) {
+            } catch (error) {
+                console.error('[AutoSender] 发送问题失败:', error);
                 return false;
             }
         }
@@ -340,13 +486,35 @@
             this.detector = detector;
             this.autoSender = autoSender;
             this.isVisible = false;
+            this.lastSelection = '';
+            this.selectionCheckInterval = null;
+            this.autoProcessInterval = null;
+            // 跟踪正在删除的问题ID，防止在动画期间重新渲染
+            this.deletingIds = new Set();
             
             this.createUI();
             this.bindEvents();
             this.startAutoProcess();
             
+            // 使用事件委托绑定删除按钮（只需要绑定一次）
+            this.setupDeleteButtonDelegation();
+            
             // 初始化时渲染队列，显示正确的数字
             this.renderQuestions();
+        }
+        
+        /**
+         * 清理所有事件监听器和定时器
+         */
+        destroy() {
+            if (this.selectionCheckInterval) {
+                clearInterval(this.selectionCheckInterval);
+                this.selectionCheckInterval = null;
+            }
+            if (this.autoProcessInterval) {
+                clearInterval(this.autoProcessInterval);
+                this.autoProcessInterval = null;
+            }
         }
 
         createUI() {
@@ -363,7 +531,7 @@
             // 创建独立的设置按钮
             this.settingsBtn = document.createElement('button');
             this.settingsBtn.className = 'qq-floating-settings-btn';
-            this.settingsBtn.innerHTML = '⚙️';
+            this.settingsBtn.textContent = '⚙️';
             this.settingsBtn.title = '设置';
             document.body.appendChild(this.settingsBtn);
 
@@ -488,8 +656,9 @@
                     currentX = e.clientX - initialX;
                     currentY = e.clientY - initialY;
 
-                    // 检测是否移动超过5px，如果是则认为是拖动
-                    if (Math.abs(currentX - xOffset) > 5 || Math.abs(currentY - yOffset) > 5) {
+                    // 检测是否移动超过阈值，如果是则认为是拖动
+                    if (Math.abs(currentX - xOffset) > CONSTANTS.DRAG_THRESHOLD || 
+                        Math.abs(currentY - yOffset) > CONSTANTS.DRAG_THRESHOLD) {
                         hasMoved = true;
                         element.classList.add('dragging');
                     }
@@ -522,7 +691,7 @@
                         e.stopPropagation();
                         
                         // 确保按钮在top layer（使用最大z-index）
-                        element.style.zIndex = '2147483647';
+                        element.style.zIndex = CONSTANTS.MAX_Z_INDEX.toString();
                         
                         // 拖动结束后，如果面板打开，更新位置（通过transition实现拖尾效果）
                         if (self.isVisible) {
@@ -539,7 +708,7 @@
                     }
                     
                     // 即使没有移动，也更新z-index
-                    element.style.zIndex = '2147483647';
+                    element.style.zIndex = CONSTANTS.MAX_Z_INDEX.toString();
                 }
             }
 
@@ -595,8 +764,16 @@
             this.elements.readyWaitInput.addEventListener('change', () => this.saveSettings());
             this.elements.soundCheckbox.addEventListener('change', () => this.saveSettings());
 
-            // 定期更新选择显示
-            setInterval(() => this.updateSelectionDisplay(), 500);
+            // 使用事件驱动更新选择显示，而不是定期轮询
+            this.lastSelection = '';
+            // 只在选择变化时更新，减少 DOM 查询
+            this.selectionCheckInterval = setInterval(() => {
+                const currentSelection = this.selectionTracker.getSelection();
+                if (currentSelection !== this.lastSelection) {
+                    this.lastSelection = currentSelection;
+                    this.updateSelectionDisplay();
+                }
+            }, CONSTANTS.SELECTION_CHECK_INTERVAL);
         }
 
         showSettings() {
@@ -633,9 +810,9 @@
         positionPanel() {
             // 获取按钮的位置
             const btnRect = this.elements.toggleBtn.getBoundingClientRect();
-            const panelWidth = 360;
-            const panelMaxHeight = 400;
-            const gap = 10;
+            const panelWidth = CONSTANTS.PANEL_WIDTH;
+            const panelMaxHeight = CONSTANTS.PANEL_MAX_HEIGHT;
+            const gap = CONSTANTS.PANEL_GAP;
 
             // 判断按钮在屏幕的哪个区域
             const isLeftSide = btnRect.left < window.innerWidth / 2;
@@ -728,52 +905,144 @@
             if (!text) return;
 
             const context = this.selectionTracker.getSelection();
-            this.queueManager.addQuestion(text, context);
             
-            this.elements.input.value = '';
-            this.selectionTracker.clearSelection();
-            this.updateSelectionDisplay();
-            this.renderQuestions();
+            try {
+                this.queueManager.addQuestion(text, context);
+                this.elements.input.value = '';
+                this.selectionTracker.clearSelection();
+                this.updateSelectionDisplay();
+                this.renderQuestions();
+            } catch (error) {
+                // 显示错误提示
+                console.error('添加问题失败:', error.message);
+                this.updateStatus('error', error.message);
+                // 3秒后清除错误状态
+                setTimeout(() => {
+                    this.updateStatus('', '');
+                }, 3000);
+            }
         }
 
         renderQuestions() {
-            const questions = this.queueManager.questions;
-            const count = questions.length;
-            
             // 保存当前transform状态
             const currentTransform = this.elements.toggleBtn.style.transform;
-            this.elements.toggleBtn.textContent = count;
+            // 显示总数
+            this.elements.toggleBtn.textContent = this.queueManager.questions.length;
             // 恢复transform状态
             if (currentTransform) {
                 this.elements.toggleBtn.style.transform = currentTransform;
             }
 
-            if (count === 0) {
-                this.elements.listContent.innerHTML = '<div class="qq-empty-state">某问题</div>';
+            const questions = this.queueManager.questions;
+            const count = questions.length;
+            const hasDeletingItems = this.deletingIds.size > 0;
+
+            // 如果有正在删除的项目，使用增量更新模式（不重新渲染整个列表）
+            if (hasDeletingItems) {
+                // 获取当前DOM中所有项目的ID
+                const currentItems = Array.from(this.elements.listContent.querySelectorAll('.qq-question-item'));
+                const currentIds = new Set(currentItems.map(item => item.dataset.id));
+                
+                // 获取应该显示的项目ID（排除正在删除的）
+                const expectedIds = new Set(questions.map(q => q.id));
+                
+                // 移除那些不在队列中且不在删除列表中的项目（已删除但不在动画中的）
+                currentItems.forEach(item => {
+                    const id = item.dataset.id;
+                    if (!expectedIds.has(id) && !this.deletingIds.has(id)) {
+                        item.remove();
+                    }
+                });
+                
+                // 添加新项目（只添加不在DOM中的）
+                questions.forEach((q) => {
+                    if (!currentIds.has(q.id)) {
+                        const item = this.createQuestionItem(q);
+                        this.elements.listContent.appendChild(item);
+                    }
+                });
+                
+                // 重新绑定拖动事件（删除按钮使用事件委托，不需要重新绑定）
+                this.setupDragAndDrop();
+                
                 return;
             }
 
-            const html = questions.map((q, index) => `
-                <div class="qq-question-item" data-id="${q.id}" draggable="true">
-                    <div class="qq-question-text">${q.question}${q.context ? ' [含上下文]' : ''}</div>
-                    <button class="qq-delete-btn" data-action="delete">×</button>
-                </div>
-            `).join('');
+            // 没有正在删除的项目，正常渲染整个列表
+            if (count === 0) {
+                // 使用 textContent 防止 XSS
+                this.elements.listContent.innerHTML = '';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'qq-empty-state';
+                emptyState.textContent = '暂无问题';
+                this.elements.listContent.appendChild(emptyState);
+                return;
+            }
 
-            this.elements.listContent.innerHTML = html;
+            // 清空列表
+            this.elements.listContent.innerHTML = '';
+            
+            // 使用 DOM API 创建元素，防止 XSS
+            questions.forEach((q) => {
+                const item = this.createQuestionItem(q);
+                this.elements.listContent.appendChild(item);
+            });
 
             // 添加拖动排序功能
             this.setupDragAndDrop();
+            // 删除按钮使用事件委托，不需要单独绑定
+        }
 
-            // 绑定删除按钮
-            this.elements.listContent.querySelectorAll('.qq-question-item').forEach(item => {
-                const id = item.dataset.id;
-                
-                item.querySelector('[data-action="delete"]').addEventListener('click', async (e) => {
+        /**
+         * 创建问题项DOM元素
+         * @param {Object} q - 问题对象
+         * @returns {HTMLElement} 创建的问题项元素
+         */
+        createQuestionItem(q) {
+            const item = document.createElement('div');
+            item.className = 'qq-question-item';
+            item.setAttribute('data-id', q.id);
+            item.draggable = true;
+            
+            const questionText = document.createElement('div');
+            questionText.className = 'qq-question-text';
+            questionText.textContent = q.question + (q.context ? ' [含上下文]' : '');
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'qq-delete-btn';
+            deleteBtn.setAttribute('data-action', 'delete');
+            deleteBtn.textContent = '×';
+            
+            item.appendChild(questionText);
+            item.appendChild(deleteBtn);
+            return item;
+        }
+
+        /**
+         * 使用事件委托设置删除按钮（只需要设置一次）
+         */
+        setupDeleteButtonDelegation() {
+            // 在列表容器上使用事件委托，避免重复绑定
+            this.elements.listContent.addEventListener('click', async (e) => {
+                const deleteBtn = e.target.closest('[data-action="delete"]');
+                if (deleteBtn) {
                     e.stopPropagation();
-                    await this.removeQuestionWithAnimation(id);
-                });
+                    const item = deleteBtn.closest('.qq-question-item');
+                    if (item) {
+                        const id = item.dataset.id;
+                        await this.removeQuestionWithAnimation(id);
+                    }
+                }
             });
+        }
+
+        /**
+         * 绑定删除按钮事件（已废弃，使用事件委托代替）
+         * @deprecated 使用 setupDeleteButtonDelegation() 代替
+         */
+        bindDeleteButtons() {
+            // 此方法已不再需要，因为使用了事件委托
+            // 保留此方法以避免破坏现有代码结构
         }
 
         async removeQuestionWithAnimation(id) {
@@ -786,12 +1055,24 @@
                 return;
             }
 
+            // 立即标记为正在删除，防止在动画期间重新渲染
+            this.deletingIds.add(id);
+            
+            // 立即从队列中移除（但保留DOM元素直到动画完成）
+            this.queueManager.removeQuestion(id);
+            
+            // 更新按钮数字（因为队列已经减少了）
+            const currentTransform = this.elements.toggleBtn.style.transform;
+            this.elements.toggleBtn.textContent = this.queueManager.questions.length;
+            if (currentTransform) {
+                this.elements.toggleBtn.style.transform = currentTransform;
+            }
 
             // 1. 开始删除动画（向左弹出）
             itemToRemove.classList.add('removing');
 
-            // 2. 等待删除动画完成（1s）
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // 2. 等待删除动画完成
+            await new Promise(resolve => setTimeout(resolve, CONSTANTS.DELETE_SLIDE_DURATION));
 
 
             // 3. 记录当前高度
@@ -815,11 +1096,10 @@
 
 
             // 7. 等待收缩动画完成
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, CONSTANTS.DELETE_COLLAPSE_DURATION));
 
-
-            // 8. 真正删除数据并重新渲染
-            this.queueManager.removeQuestion(id);
+            // 8. 从删除列表中移除，并重新渲染（此时队列中已经没有这个项目了）
+            this.deletingIds.delete(id);
             this.renderQuestions();
         }
 
@@ -855,9 +1135,9 @@
                 if (!listArea) return;
                 
                 const rect = listArea.getBoundingClientRect();
-                const scrollThreshold = 80; // 判定范围80px
-                const maxSpeed = 3; // 最大速度（降低）
-                const minSpeed = 0.5; // 最小速度
+                const scrollThreshold = CONSTANTS.SCROLL_THRESHOLD;
+                const maxSpeed = CONSTANTS.SCROLL_MAX_SPEED;
+                const minSpeed = CONSTANTS.SCROLL_MIN_SPEED;
 
                 // 计算鼠标相对于列表区域的位置
                 const mouseY = e.clientY - rect.top;
@@ -915,7 +1195,7 @@
                     // 稍微延迟更新顺序，确保动画完成
                     setTimeout(() => {
                         this.updateQuestionOrder();
-                    }, 50);
+                    }, CONSTANTS.DRAG_UPDATE_DELAY);
                 });
 
                 item.addEventListener('dragover', (e) => {
@@ -977,65 +1257,67 @@
         }
 
         async startAutoProcess() {
-            
-            while (true) {
-                await this.detector.sleep(2000);
-
-                if (this.queueManager.isProcessing || this.queueManager.isPaused) {
-                    continue;
-                }
-
-                const nextQuestion = this.queueManager.getNextQuestion();
-                if (!nextQuestion) {
-                    this.updateStatus('', '空闲');
-                    continue;
-                }
-
-
-                if (this.detector.isReadyForNext()) {
-                    this.queueManager.isProcessing = true;
-                    this.updateStatus('processing', `等待${this.autoSender.settings.readyWaitDelay}ms...`);
-
-                    // 等待用户设置的准备延迟
-                    await this.detector.sleep(this.autoSender.settings.readyWaitDelay);
-
-                    // 再次检查状态
-                    if (!this.detector.isReadyForNext()) {
-                        this.queueManager.isProcessing = false;
+            // 使用 setInterval 替代 while(true) 循环，避免阻塞
+            this.autoProcessInterval = setInterval(async () => {
+                try {
+                    if (this.queueManager.isProcessing || this.queueManager.isPaused) {
                         return;
                     }
 
-                    this.updateStatus('processing', '发送中...');
-                    
-                    // 用于存储动画Promise
-                    let animationPromise = null;
-                    
-                    // 发送问题，并在输入完成时开始动画
-                    const success = await this.autoSender.sendQuestion(nextQuestion, () => {
-                        animationPromise = this.removeQuestionWithAnimation(nextQuestion.id);
-                    });
-                    
-                    if (success) {
-                        // 等待动画完成
-                        if (animationPromise) {
-                            await animationPromise;
-                        }
-                        // 等待发送延迟
-                        await this.detector.sleep(this.autoSender.settings.autoSendDelay);
-                        this.updateStatus('', '成功');
-                    } else {
-                        // 即使失败也等待动画完成
-                        if (animationPromise) {
-                            await animationPromise;
-                        }
-                        this.updateStatus('error', '失败');
+                    const nextQuestion = this.queueManager.getNextQuestion();
+                    if (!nextQuestion) {
+                        this.updateStatus('', '空闲');
+                        return;
                     }
 
+                    if (this.detector.isReadyForNext()) {
+                        this.queueManager.isProcessing = true;
+                        this.updateStatus('processing', `等待${this.autoSender.settings.readyWaitDelay}ms...`);
+
+                        // 等待用户设置的准备延迟
+                        await this.detector.sleep(this.autoSender.settings.readyWaitDelay);
+
+                        // 再次检查状态
+                        if (!this.detector.isReadyForNext()) {
+                            this.queueManager.isProcessing = false;
+                            return;
+                        }
+
+                        this.updateStatus('processing', '发送中...');
+                        
+                        // 用于存储动画Promise
+                        let animationPromise = null;
+                        
+                        // 发送问题，并在输入完成时开始动画
+                        const success = await this.autoSender.sendQuestion(nextQuestion, () => {
+                            animationPromise = this.removeQuestionWithAnimation(nextQuestion.id);
+                        });
+                        
+                        if (success) {
+                            // 等待动画完成
+                            if (animationPromise) {
+                                await animationPromise;
+                            }
+                            // 等待发送延迟
+                            await this.detector.sleep(this.autoSender.settings.autoSendDelay);
+                            this.updateStatus('', '成功');
+                        } else {
+                            // 即使失败也等待动画完成
+                            if (animationPromise) {
+                                await animationPromise;
+                            }
+                            this.updateStatus('error', '失败');
+                        }
+
+                        this.queueManager.isProcessing = false;
+                    } else {
+                        this.updateStatus('processing', '等待...');
+                    }
+                } catch (error) {
+                    console.error('[UIController] 自动处理过程出错:', error);
                     this.queueManager.isProcessing = false;
-                } else {
-                    this.updateStatus('processing', '等待...');
                 }
-            }
+            }, CONSTANTS.AUTO_PROCESS_INTERVAL);
         }
 
         loadSettingsToUI() {
@@ -1053,17 +1335,24 @@
     }
 
     // ==================== 初始化 ====================
+    /**
+     * 初始化应用，创建所有必要的实例并启动功能
+     */
     async function init() {
+        try {
+            console.log('[Init] 开始初始化 ChatGPT 问题队列扩展...');
+            
+            const storage = new StorageManager();
+            const selectionTracker = new SelectionTracker();
+            const queueManager = new QuestionQueueManager(storage);
+            const detector = new ChatGPTDetector();
+            const autoSender = new AutoSender(detector, storage);
 
-        const storage = new StorageManager();
-        const selectionTracker = new SelectionTracker();
-        const queueManager = new QuestionQueueManager(storage);
-        const detector = new ChatGPTDetector();
-        const autoSender = new AutoSender(detector, storage);
-
-        await queueManager.loadFromStorage();
-        
-        const uiController = new UIController(selectionTracker, queueManager, detector, autoSender);
+            await queueManager.loadFromStorage();
+            
+            const uiController = new UIController(selectionTracker, queueManager, detector, autoSender);
+            
+            console.log('[Init] 初始化完成');
 
         // 启动选择追踪，传入回调函数
         selectionTracker.startTracking((text) => {
@@ -1084,14 +1373,20 @@
             }
             uiController.elements.input.focus();
         });
-
+        } catch (error) {
+            console.error('[Init] 初始化失败:', error);
+        }
     }
 
     // 等待页面加载
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
+        // 延迟初始化，确保页面完全加载
         setTimeout(init, 1000);
     }
+    
+    // 添加加载状态提示（在控制台）
+    console.log('[ChatGPT 问题队列] 扩展脚本已加载，等待初始化...');
 })();
 
