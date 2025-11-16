@@ -21,14 +21,6 @@
         "https://chat.openai.com/*"
       ],
       "js": [
-        "constants.js",
-        "utils.js",
-        "StorageManager.js",
-        "SelectionTracker.js",
-        "QuestionQueueManager.js",
-        "ChatGPTDetector.js",
-        "AutoSender.js",
-        "UIController.js",
         "content.js"
       ],
       "css": ["styles.css"],
@@ -37,6 +29,24 @@
   ],
   "action": {
     "default_popup": "popup.html"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "constants.js",
+        "utils.js",
+        "StorageManager.js",
+        "SelectionTracker.js",
+        "QuestionQueueManager.js",
+        "ChatGPTDetector.js",
+        "AutoSender.js",
+        "UIController.js"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ]
+    }
+  ]
 }
 

@@ -1,11 +1,11 @@
 // ChatGPT 问题队列 - UI 控制器
-(function() {
-    'use strict';
+import { CONSTANTS } from './constants.js';
+import { getStorageKey } from './utils.js';
 
-    /**
-     * UI 控制器类，负责所有用户界面交互
-     */
-    window.UIController = class UIController {
+/**
+ * UI 控制器类，负责所有用户界面交互
+ */
+export class UIController {
         constructor(selectionTracker, queueManager, detector, autoSender, storage) {
             this.selectionTracker = selectionTracker;
             this.queueManager = queueManager;
@@ -997,6 +997,5 @@
             this.autoSender.settings.enableSound = this.elements.soundCheckbox.checked;
             this.autoSender.saveSettings();
         }
-    };
-})();
+    }
 
