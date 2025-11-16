@@ -1,0 +1,45 @@
+// ChatGPT 问题队列 - 常量定义
+(function() {
+    'use strict';
+
+    // 将常量暴露到全局作用域
+    window.CONSTANTS = {
+        // 输入限制
+        MIN_QUESTION_LENGTH: 1,
+        MAX_QUESTION_LENGTH: 10000,
+        MIN_CONTEXT_LENGTH: 3,
+        MAX_CONTEXT_LENGTH: 2000,
+        
+        // 时间延迟（毫秒）
+        AUTO_PROCESS_INTERVAL: 2000,
+        SELECTION_CHECK_INTERVAL: 500,
+        FOCUS_DELAY: 200,
+        SEND_BUTTON_DELAY: 500,
+        SELECTION_DELAY: 10,
+        DRAG_UPDATE_DELAY: 50,
+        
+        // 动画时间（毫秒）
+        DELETE_SLIDE_DURATION: 1000,
+        DELETE_COLLAPSE_DURATION: 2000,
+        
+        // UI 尺寸
+        PANEL_WIDTH: 360,
+        PANEL_MAX_HEIGHT: 400,
+        PANEL_GAP: 10,
+        BUTTON_SIZE: 40,
+        POPUP_BUTTON_SIZE: 32,
+        POPUP_BUTTON_OFFSET: 16,
+        
+        // Z-index
+        MAX_Z_INDEX: 2147483647,
+        
+        // 拖拽阈值
+        DRAG_THRESHOLD: 5,
+        
+        // 滚动相关
+        SCROLL_THRESHOLD: 80,
+        SCROLL_MAX_SPEED: 3,
+        SCROLL_MIN_SPEED: 0.5
+    };
+})();
+

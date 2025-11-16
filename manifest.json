@@ -20,7 +20,17 @@
         "https://chatgpt.com/*",
         "https://chat.openai.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "constants.js",
+        "utils.js",
+        "StorageManager.js",
+        "SelectionTracker.js",
+        "QuestionQueueManager.js",
+        "ChatGPTDetector.js",
+        "AutoSender.js",
+        "UIController.js",
+        "content.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_end"
     }
